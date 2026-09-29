@@ -1,0 +1,3 @@
+import { z } from 'zod'
+
+export const jobSchema = z.object({ title: z.string().trim().min(2).max(120), department: z.string().trim().min(2).max(80), location: z.string().trim().min(2).max(120), type: z.string().trim().min(2).max(60), description: z.string().trim().min(20).max(8000), requirements: z.array(z.string().trim().min(2).max(240)).min(1).max(30), lastDate: z.coerce.date(), openings: z.number().int().min(1).max(100) })

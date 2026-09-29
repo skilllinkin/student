@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum ApplicationStage {
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum SummaryStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  phone        String?
+  role         UserRole
+  passwordHash String        @map("password_hash")
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  candidate    CandidateProfile?
+  assignments  JobAssignment[]
+  applications Application[] @relation("CandidateApplications")
+  interviews   Interview[]   @relation("RecruiterInterviews")
+  notes        RecruiterNote[]
+  stageChanges StageHistory[]
+
+  @@map("users")
+}
+
+model CandidateProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  cvPath    String?  @map("cv_path")
+  cvName    String?  @map("cv_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("candidate_profiles")
+}
+
+model Job {
+  id           String          @id @default(cuid())
+  title        String
+  department   String
+  location     String
+  type         String
+  description  String
+  requirements String[]
+  lastDate     DateTime        @map("last_date") @db.Date
+  openings     Int
+  status       JobStatus       @default(DRAFT)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  assignments  JobAssignment[]
+  applications Application[]
+
+  @@index([status, lastDate])
+  @@map("jobs")
+}
+
+model JobAssignment {
+  jobId      String   @map("job_id")
+  recruiterId String  @map("recruiter_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  recruiter  User     @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, recruiterId])
+  @@map("job_assignments")
+}
+
+model Application {
+  id           String          @id @default(cuid())
+  candidateId  String          @map("candidate_id")
+  jobId        String          @map("job_id")
+  stage        ApplicationStage @default(APPLIED)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  candidate    User            @relation("CandidateApplications", fields: [candidateId], references: [id])
+  job          Job             @relation(fields: [jobId], references: [id])
+  cv           ApplicationCv?
+  interviews   Interview[]
+  notes        RecruiterNote[]
+  summary      AiSummary?
+  history      StageHistory[]
+
+  @@index([candidateId, jobId, stage])
+  @@index([jobId, stage, createdAt])
+  @@map("applications")
+}
+
+model ApplicationCv {
+  id            String      @id @default(cuid())
+  applicationId String      @unique @map("application_id")
+  filePath      String      @map("file_path")
+  fileName      String      @map("file_name")
+  uploadedAt    DateTime    @default(now()) @map("uploaded_at")
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_cvs")
+}
+
+model Interview {
+  id             String      @id @default(cuid())
+  applicationId  String      @map("application_id")
+  recruiterId    String      @map("recruiter_id")
+  startsAt       DateTime    @map("starts_at")
+  endsAt         DateTime    @map("ends_at")
+  locationOrLink String      @map("location_or_link")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  recruiter      User        @relation("RecruiterInterviews", fields: [recruiterId], references: [id])
+
+  @@index([recruiterId, startsAt, endsAt])
+  @@map("interviews")
+}
+
+model RecruiterNote {
+  id            String      @id @default(cuid())
+  applicationId String      @map("application_id")
+  recruiterId   String      @map("recruiter_id")
+  content       String
+  createdAt     DateTime    @default(now()) @map("created_at")
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  recruiter     User        @relation(fields: [recruiterId], references: [id])
+
+  @@map("recruiter_notes")
+}
+
+model AiSummary {
+  id              String        @id @default(cuid())
+  applicationId   String        @unique @map("application_id")
+  content         Json?
+  status          SummaryStatus @default(PENDING)
+  isAiGenerated   Boolean       @default(true) @map("is_ai_generated")
+  requestedAt     DateTime      @default(now()) @map("requested_at")
+  completedAt     DateTime?     @map("completed_at")
+  application     Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_summaries")
+}
+
+model StageHistory {
+  id            String           @id @default(cuid())
+  applicationId String           @map("application_id")
+  fromStage     ApplicationStage? @map("from_stage")
+  toStage       ApplicationStage @map("to_stage")
+  changedBy     String           @map("changed_by")
+  changedAt     DateTime         @default(now()) @map("changed_at")
+  application   Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actor         User             @relation(fields: [changedBy], references: [id])
+
+  @@map("stage_history")
+}
+
+model EmailLog {
+  id          String   @id @default(cuid())
+  recipient   String
+  template    String
+  status      String
+  providerRef String?  @map("provider_ref")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([recipient, createdAt])
+  @@map("email_logs")
+}
